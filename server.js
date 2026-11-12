@@ -18,6 +18,7 @@ const pool = new Pool({
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
   port: process.env.DB_PORT,
+  ssl: { rejectUnauthorized: false } // Diperlukan agar aman terhubung ke Supabase secara online
 });
 
 // Inisialisasi Tabel Database PostgreSQL secara otomatis
@@ -60,8 +61,6 @@ const initDB = async () => {
       ALTER TABLE borrowings ADD COLUMN IF NOT EXISTS borrowDate TEXT;
     `);
 
-    console.log('Tabel database PostgreSQL berhasil diinisialisasi.');
-
     // Seed Data Awal jika tabel services kosong
     const check = await pool.query(`SELECT COUNT(*) as count FROM services`);
     if (parseInt(check.rows[0].count) === 0) {
@@ -71,12 +70,14 @@ const initDB = async () => {
         ('Sound System Portable', 'Audio', 'bell', 'Paket speaker aktif dan mikrofon wireless.', 4, 2, 'Maks. 2 hari', 'blue', 'SND-001,SND-002,SND-003,SND-004'),
         ('Tenda Lipat 3×3 Meter', 'Logistik Acara', 'home', 'Tenda lipat tahan air untuk luar ruang.', 8, 6, 'Maks. 3 hari', 'gold', 'TND-001,TND-002,TND-003,TND-004,TND-005,TND-006,TND-007,TND-008')
       `);
-      console.log('Data awal alat berhasil dimasukkan ke PostgreSQL.');
     }
   } catch (err) {
     console.error('Error inisialisasi database:', err.message);
   }
 };
+
+// Jalankan inisialisasi tabel saat server pertama kali ditarik
+initDB();
 
 // 1. Endpoint Google Auth (Validasi Domain Kampus)
 app.post('/api/auth/google', async (req, res) => {
@@ -144,7 +145,7 @@ app.get('/api/services', async (req, res) => {
   }
 });
 
-// 3. Endpoint Ajukan Peminjaman (Menyimpan Tanggal Pilihan Kalender: borrowDate)
+// 3. Endpoint Ajukan Peminjaman
 app.post('/api/borrow', async (req, res) => {
   try {
     const { email, service, borrowDate } = req.body;
@@ -191,13 +192,14 @@ app.put('/api/borrowings/:id/status', async (req, res) => {
   }
 });
 
-// Jalankan inisialisasi database lalu jalankan server
-const startServer = async () => {
-  await initDB();
+// --- PENGATURAN UNTUK VERCEL & LOKAL ---
+// Mengekspor app agar bisa dibaca oleh serverless functions Vercel
+export default app;
+
+// Tetap menyala menggunakan app.listen jika dijalankan secara lokal di komputer
+if (process.env.NODE_ENV !== 'production') {
   const PORT = process.env.PORT || 5000;
   app.listen(PORT, () => {
-    console.log(`Backend berjalan di port ${PORT}`);
+    console.log(`Backend lokal berjalan di port ${PORT}`);
   });
-};
-
-startServer();
+}

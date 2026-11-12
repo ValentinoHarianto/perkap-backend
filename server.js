@@ -82,13 +82,11 @@ initDB();
 // 1. Endpoint Google Auth (Validasi Domain Kampus)
 app.post('/api/auth/google', async (req, res) => {
   try {
-    // === LETAKKAN DI SINI (Di awal blok endpoint backend) ===
     const { token, email: bodyEmail, name: bodyName } = req.body;
     let email = bodyEmail;
     let name = bodyName;
 
     if (!email && token) {
-      // fallback jika token berupa idToken standar dari Google
       const ticket = await client.verifyIdToken({ idToken: token, audience: CLIENT_ID });
       const payload = ticket.getPayload();
       email = payload.email;
@@ -98,7 +96,6 @@ app.post('/api/auth/google', async (req, res) => {
     if (!email) {
       return res.status(400).json({ success: false, message: "Token atau data email Google tidak ditemukan." });
     }
-    // ========================================================
 
     const isStudent = email.endsWith('@student.unika.ac.id');
     const isStaffOrAdmin = email === '@unika.ac.id' || (email.endsWith('@unika.ac.id') && !isStudent);

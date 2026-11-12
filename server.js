@@ -82,19 +82,23 @@ initDB();
 // 1. Endpoint Google Auth (Validasi Domain Kampus)
 app.post('/api/auth/google', async (req, res) => {
   try {
-    const { token } = req.body;
-    if (!token) {
-      return res.status(400).json({ success: false, message: "Token Google tidak ditemukan." });
+    // === LETAKKAN DI SINI (Di awal blok endpoint backend) ===
+    const { token, email: bodyEmail, name: bodyName } = req.body;
+    let email = bodyEmail;
+    let name = bodyName;
+
+    if (!email && token) {
+      // fallback jika token berupa idToken standar dari Google
+      const ticket = await client.verifyIdToken({ idToken: token, audience: CLIENT_ID });
+      const payload = ticket.getPayload();
+      email = payload.email;
+      name = payload.name;
     }
 
-    const ticket = await client.verifyIdToken({
-      idToken: token,
-      audience: CLIENT_ID,
-    });
-    
-    const payload = ticket.getPayload();
-    const email = payload.email;
-    const name = payload.name;
+    if (!email) {
+      return res.status(400).json({ success: false, message: "Token atau data email Google tidak ditemukan." });
+    }
+    // ========================================================
 
     const isStudent = email.endsWith('@student.unika.ac.id');
     const isStaffOrAdmin = email === '@unika.ac.id' || (email.endsWith('@unika.ac.id') && !isStudent);
@@ -119,12 +123,12 @@ app.post('/api/auth/google', async (req, res) => {
     await pool.query(`
       INSERT INTO users (email, name, role, unit) VALUES ($1, $2, $3, $4)
       ON CONFLICT (email) DO UPDATE SET name = $2, role = $3
-    `, [email, name, role, "Unika Soegijapranata"]);
+    `, [email, name || "User Unika", role, "Unika Soegijapranata"]);
 
     res.json({
       success: true,
       email,
-      name,
+      name: name || "User Unika",
       role,
       token: "jwt-mock-token-" + Date.now()
     });
@@ -194,7 +198,7 @@ app.put('/api/borrowings/:id/status', async (req, res) => {
 
 // --- PENGATURAN UNTUK VERCEL & LOKAL ---
 // Mengekspor app agar bisa dibaca oleh serverless functions Vercel
-export default app;
+module.exports = app;
 
 // Tetap menyala menggunakan app.listen jika dijalankan secara lokal di komputer
 if (process.env.NODE_ENV !== 'production') {

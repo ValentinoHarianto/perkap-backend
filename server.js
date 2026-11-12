@@ -11,17 +11,17 @@ app.use(express.json());
 const CLIENT_ID = process.env.GOOGLE_CLIENT_ID || "526565725097-uhj6ubjrgtvtlc0i07beoqip2blr4i1q.apps.googleusercontent.com";
 const client = new OAuth2Client(CLIENT_ID);
 
-// Konfigurasi Pool PostgreSQL menggunakan file .env Anda
+// Konfigurasi Pool PostgreSQL (Supabase)
 const pool = new Pool({
   host: process.env.DB_HOST,
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
   port: process.env.DB_PORT,
-  ssl: { rejectUnauthorized: false } // Diperlukan agar aman terhubung ke Supabase secara online
+  ssl: { rejectUnauthorized: false }
 });
 
-// Inisialisasi Tabel Database PostgreSQL secara otomatis
+// Inisialisasi Database Otomatis
 const initDB = async () => {
   try {
     await pool.query(`
@@ -56,12 +56,10 @@ const initDB = async () => {
       );
     `);
 
-    // Pastikan kolom borrowDate ada pada tabel borrowings
     await pool.query(`
       ALTER TABLE borrowings ADD COLUMN IF NOT EXISTS borrowDate TEXT;
     `);
 
-    // Seed Data Awal jika tabel services kosong
     const check = await pool.query(`SELECT COUNT(*) as count FROM services`);
     if (parseInt(check.rows[0].count) === 0) {
       await pool.query(`
@@ -76,10 +74,9 @@ const initDB = async () => {
   }
 };
 
-// Jalankan inisialisasi tabel saat server pertama kali ditarik
 initDB();
 
-// 1. Endpoint Google Auth (Validasi Domain Kampus)
+// 1. Endpoint Google Auth (Menerima Token Akses / OAuth Redirect)
 app.post('/api/auth/google', async (req, res) => {
   try {
     const { token, email: bodyEmail, name: bodyName } = req.body;
@@ -181,7 +178,7 @@ app.get('/api/borrowings', async (req, res) => {
   }
 });
 
-// 5. Endpoint Update Status Peminjaman (Oleh Staff)
+// 5. Endpoint Update Status Peminjaman
 app.put('/api/borrowings/:id/status', async (req, res) => {
   try {
     const { id } = req.params;
@@ -193,11 +190,8 @@ app.put('/api/borrowings/:id/status', async (req, res) => {
   }
 });
 
-// --- PENGATURAN UNTUK VERCEL & LOKAL ---
-// Mengekspor app agar bisa dibaca oleh serverless functions Vercel
 module.exports = app;
 
-// Tetap menyala menggunakan app.listen jika dijalankan secara lokal di komputer
 if (process.env.NODE_ENV !== 'production') {
   const PORT = process.env.PORT || 5000;
   app.listen(PORT, () => {

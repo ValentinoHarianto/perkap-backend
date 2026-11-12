@@ -13,9 +13,25 @@ const CLIENT_ID =
 
 const STUDENT_DOMAIN = '@student.unika.ac.id';
 const STAFF_DOMAIN = '@unika.ac.id';
-const ADMIN_EMAILS = ['rafael.santoso@unika.ac.id', 'admin.perkap@unika.ac.id'];
-const STAFF_EMAILS = ['dina.pratiwi@unika.ac.id', 'staff.perkap@unika.ac.id'];
+const VALID_ROLES = ['student', 'staff', 'admin'];
 const VALID_STATUS = ['Pending Review', 'Disetujui', 'Ditolak'];
+
+// Daftar email untuk role AWAL (hanya dipakai saat user pertama kali login).
+// Setelah user tercatat di tabel "users", role dibaca dari database (Supabase).
+// Bisa diisi lewat env var ADMIN_EMAILS / STAFF_EMAILS (pisahkan dengan koma).
+const parseList = (v) =>
+  (v || '')
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+
+const ADMIN_EMAILS = parseList(process.env.ADMIN_EMAILS).length
+  ? parseList(process.env.ADMIN_EMAILS)
+  : ['rafael.santoso@unika.ac.id', 'admin.perkap@unika.ac.id'];
+
+const STAFF_EMAILS = parseList(process.env.STAFF_EMAILS).length
+  ? parseList(process.env.STAFF_EMAILS)
+  : ['dina.pratiwi@unika.ac.id', 'staff.perkap@unika.ac.id'];
 
 // ---------- Database (Supabase / PostgreSQL) ----------
 const pool = new Pool({
@@ -135,16 +151,29 @@ app.post('/api/auth/google', async (req, res) => {
       });
     }
 
-    let role = 'student';
-    if (ADMIN_EMAILS.includes(email)) {
-      role = 'admin';
-    } else if (STAFF_EMAILS.includes(email) || !isStudent) {
-      role = 'staff';
+    // Cek apakah user sudah ada di database
+    const existing = await pool.query(`SELECT role, active FROM users WHERE email = $1`, [email]);
+    const row = existing.rows[0];
+
+    if (row && row.active === 0) {
+      return res.status(403).json({ success: false, message: 'Akun Anda dinonaktifkan.' });
     }
 
+    let role;
+    if (row && VALID_ROLES.includes(row.role)) {
+      // Role diambil dari database (bisa diubah lewat Supabase)
+      role = row.role;
+    } else {
+      // User baru: tentukan role awal
+      role = 'student';
+      if (ADMIN_EMAILS.includes(email)) role = 'admin';
+      else if (STAFF_EMAILS.includes(email) || !isStudent) role = 'staff';
+    }
+
+    // Role tidak ditimpa saat user sudah ada
     await pool.query(
       `INSERT INTO users (email, name, role, unit) VALUES ($1, $2, $3, $4)
-       ON CONFLICT (email) DO UPDATE SET name = $2, role = $3`,
+       ON CONFLICT (email) DO UPDATE SET name = $2`,
       [email, name || 'User Unika', role, 'Unika Soegijapranata']
     );
 
